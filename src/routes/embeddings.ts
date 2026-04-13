@@ -116,11 +116,25 @@ router.post("/embeddings", async (req: Request, res: Response) => {
     const usage = (data as { usage?: { prompt_tokens?: number; total_tokens?: number } }).usage;
     const promptTokens = usage?.prompt_tokens ?? 0;
 
+    // Build a readable summary of the embedding response for the detail view
+    const embeddingData = (data as { data?: Array<{ embedding?: number[]; index?: number }> }).data;
+    let responseSummary = "";
+    if (embeddingData && Array.isArray(embeddingData)) {
+      for (const item of embeddingData) {
+        const vec = item.embedding;
+        if (vec && Array.isArray(vec)) {
+          const preview = vec.slice(0, 10).map((v) => v.toFixed(6)).join(", ");
+          responseSummary += `[${item.index ?? 0}] ${vec.length} dimensions: [${preview}, ...]\n`;
+        }
+      }
+    }
+
     completeRequest(logId, "success", {
       inputTokens: promptTokens,
       outputTokens: 0,
       totalCostUsd: 0, // local model, no cost
       durationMs: Date.now() - startTime,
+      fullResponse: responseSummary || JSON.stringify(data),
     });
 
     res.json(data);

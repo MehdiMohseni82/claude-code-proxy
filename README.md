@@ -11,7 +11,8 @@ The Claude Code Agent SDK authenticates via OAuth tokens from a Claude Pro/Max s
 ## Features
 
 - **Dual API support** -- OpenAI `/v1/chat/completions` and Anthropic `/v1/messages` endpoints
-- **Model mapping** -- Send `gpt-4o` and it routes to `claude-sonnet-4-6`
+- **Embeddings** -- OpenAI-compatible `/v1/embeddings` endpoint backed by local Ollama (nomic-embed-text)
+- **Model mapping** -- Send `gpt-4o` and it routes to `claude-sonnet-4-6`; `text-embedding-3-small` routes to `nomic-embed-text`
 - **Full streaming** -- Server-sent events on both endpoints
 - **Tool use** -- User-defined tools (function calling), Anthropic server tools (`web_search`, etc.), and Claude Code built-in tools (`Bash`, `Read`, `Edit`, `Grep`, ...)
 - **API key management** -- Create, revoke, and configure keys through the admin UI
@@ -28,9 +29,9 @@ The Claude Code Agent SDK authenticates via OAuth tokens from a Claude Pro/Max s
 
 ```
                                  +-----------------+
-  OpenAI SDK / Cursor / etc. --->|                 |
-                                 |  Express Server |---> Claude Code Agent SDK ---> Claude
-  Anthropic SDK / HTTP --------->|  (port 3456)    |        (subprocess)
+  OpenAI SDK / Cursor / etc. --->|                 |---> Claude Code Agent SDK ---> Claude
+                                 |  Express Server |
+  Anthropic SDK / HTTP --------->|  (port 3456)    |---> Ollama (local embeddings)
                                  |                 |
                                  +-----------------+
                                         |
@@ -166,6 +167,10 @@ Create API keys through the admin dashboard at `/admin/keys`.
 | `claude-opus-4-6` | `claude-opus-4-6` |
 | `claude-sonnet-4-6` | `claude-sonnet-4-6` |
 | `claude-haiku-4-5` | `claude-haiku-4-5` |
+| `text-embedding-ada-002` | `nomic-embed-text` (via Ollama) |
+| `text-embedding-3-small` | `nomic-embed-text` (via Ollama) |
+| `text-embedding-3-large` | `nomic-embed-text` (via Ollama) |
+| `nomic-embed-text` | `nomic-embed-text` (via Ollama) |
 | Any other string | Passed through as-is |
 
 ### OpenAI-Compatible Endpoints
@@ -261,6 +266,42 @@ curl https://your-domain/v1/messages \
 ```
 
 > Built-in tools must be enabled per API key through the admin dashboard.
+
+### Embeddings
+
+#### `POST /v1/embeddings`
+
+OpenAI-compatible embeddings endpoint, backed by a local Ollama instance running `nomic-embed-text`. Accepts OpenAI model names -- they're mapped to the local model automatically.
+
+```bash
+curl https://your-domain/v1/embeddings \
+  -H "Authorization: Bearer sk-your-key" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "text-embedding-3-small", "input": "Hello world"}'
+```
+
+**Batch embeddings:**
+
+```bash
+curl https://your-domain/v1/embeddings \
+  -H "Authorization: Bearer sk-your-key" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "nomic-embed-text", "input": ["First text", "Second text", "Third text"]}'
+```
+
+Response follows the OpenAI format:
+```json
+{
+  "object": "list",
+  "data": [
+    {"object": "embedding", "embedding": [0.123, -0.456, ...], "index": 0}
+  ],
+  "model": "nomic-embed-text",
+  "usage": {"prompt_tokens": 2, "total_tokens": 2}
+}
+```
+
+> Requires Ollama running with the model pulled. See [Ollama Setup](#ollama-setup-embeddings) below.
 
 ### Health Check
 
@@ -370,6 +411,31 @@ The app container listens on `127.0.0.1:9026` and the admin on `127.0.0.1:9027`.
 
 ---
 
+## Ollama Setup (Embeddings)
+
+The proxy uses [Ollama](https://ollama.com) for local embeddings. The Ollama container is included in Docker Compose but starts empty -- you need to pull the embedding model once:
+
+```bash
+# After docker-compose up
+docker exec claudeproxy-ollama ollama pull nomic-embed-text
+```
+
+This downloads ~274MB. The model is cached in the `ollama-data` volume and persists across restarts.
+
+**For local development** (without Docker), install Ollama directly and pull the model:
+
+```bash
+# Install Ollama (see https://ollama.com/download)
+ollama pull nomic-embed-text
+
+# Set the URL in .env
+OLLAMA_URL=http://localhost:11434
+```
+
+**Model quality:** `nomic-embed-text` scores 62.39 on the [MTEB benchmark](https://huggingface.co/spaces/mteb/leaderboard), matching OpenAI's `text-embedding-3-small` (62.3). It runs on CPU without requiring a GPU.
+
+---
+
 ## Using with Popular Tools
 
 ### OpenAI Python SDK
@@ -387,6 +453,13 @@ response = client.chat.completions.create(
     messages=[{"role": "user", "content": "Hello!"}]
 )
 print(response.choices[0].message.content)
+
+# Embeddings
+embeddings = client.embeddings.create(
+    model="text-embedding-3-small",  # maps to nomic-embed-text
+    input=["Hello world", "How are you?"]
+)
+print(len(embeddings.data[0].embedding))  # 768 dimensions
 ```
 
 ### OpenAI Node.js SDK
@@ -479,6 +552,7 @@ claude-code-proxy/
     routes/
       proxy.ts             # /v1/chat/completions, /v1/models
       anthropic.ts         # /v1/messages
+      embeddings.ts        # /v1/embeddings (proxied to Ollama)
       adminApi.ts          # /api/admin/* (keys, tasks, history, settings)
       health.ts            # /health
     services/

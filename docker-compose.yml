@@ -6,6 +6,7 @@ services:
       - DATABASE_PATH=/app/data/proxy.db
       - ADMIN_API_SECRET=${ADMIN_API_SECRET}
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
+      - OLLAMA_URL=http://ollama:11434
     volumes:
       - app-data:/app/data
     expose:
@@ -41,6 +42,14 @@ services:
       - admin
     restart: unless-stopped
 
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    expose:
+      - "11434"
+    restart: unless-stopped
+
   certbot:
     image: certbot/certbot
     volumes:
@@ -51,5 +60,6 @@ services:
 
 volumes:
   app-data:
+  ollama-data:
   certbot-etc:
   certbot-www:

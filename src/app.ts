@@ -1,6 +1,7 @@
 import express from "express";
 import proxyRoutes from "./routes/proxy.js";
 import anthropicRoutes from "./routes/anthropic.js";
+import embeddingsRoutes from "./routes/embeddings.js";
 import adminApiRoutes from "./routes/adminApi.js";
 import healthRoutes from "./routes/health.js";
 import { apiKeyAuth } from "./middleware/apiKeyAuth.js";
@@ -22,6 +23,8 @@ app.use("/api/admin", adminApiRoutes);
 app.use("/v1", apiKeyAuth, budgetCheckMiddleware, rateLimitMiddleware, proxyRoutes);
 // Native Anthropic Messages: POST /v1/messages
 app.use("/v1", apiKeyAuth, budgetCheckMiddleware, rateLimitMiddleware, anthropicRoutes);
+// Embeddings: POST /v1/embeddings (proxied to Ollama)
+app.use("/v1", apiKeyAuth, budgetCheckMiddleware, rateLimitMiddleware, embeddingsRoutes);
 
 // Centralized error handler
 app.use(errorHandler);

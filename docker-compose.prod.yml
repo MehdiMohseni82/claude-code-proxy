@@ -12,6 +12,7 @@ services:
       # Token can now be set via admin UI (Settings page) instead of env var.
       # If set here, it serves as a fallback when no token is in the database.
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      - OLLAMA_URL=http://ollama:11434
     volumes:
       - app-data:/app/data
     ports:
@@ -34,5 +35,13 @@ services:
       - app
     restart: unless-stopped
 
+  ollama:
+    image: ollama/ollama
+    container_name: claudeproxy-ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+
 volumes:
   app-data:
+  ollama-data:

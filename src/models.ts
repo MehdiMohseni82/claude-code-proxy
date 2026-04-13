@@ -11,6 +11,11 @@ export const MODEL_MAP: Record<string, string> = {
   "claude-opus-4-6": "claude-opus-4-6",
   "claude-sonnet-4-6": "claude-sonnet-4-6",
   "claude-haiku-4-5": "claude-haiku-4-5",
+  // Embedding models → Ollama (nomic-embed-text)
+  "text-embedding-ada-002": "nomic-embed-text",
+  "text-embedding-3-small": "nomic-embed-text",
+  "text-embedding-3-large": "nomic-embed-text",
+  "nomic-embed-text": "nomic-embed-text",
 };
 
 export const AVAILABLE_MODELS = [
@@ -20,6 +25,10 @@ export const AVAILABLE_MODELS = [
   { id: "gpt-4o", name: "GPT-4o (mapped to Claude Sonnet 4.6)" },
   { id: "gpt-4", name: "GPT-4 (mapped to Claude Sonnet 4.6)" },
   { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo (mapped to Claude Haiku 4.5)" },
+  { id: "nomic-embed-text", name: "Nomic Embed Text (local, via Ollama)" },
+  { id: "text-embedding-3-small", name: "text-embedding-3-small (mapped to nomic-embed-text)" },
+  { id: "text-embedding-3-large", name: "text-embedding-3-large (mapped to nomic-embed-text)" },
+  { id: "text-embedding-ada-002", name: "text-embedding-ada-002 (mapped to nomic-embed-text)" },
 ];
 
 export function resolveModel(requested: string): string {

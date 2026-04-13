@@ -1,0 +1,55 @@
+services:
+  app:
+    build: .
+    environment:
+      - PORT=3456
+      - DATABASE_PATH=/app/data/proxy.db
+      - ADMIN_API_SECRET=${ADMIN_API_SECRET}
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN}
+    volumes:
+      - app-data:/app/data
+    expose:
+      - "3456"
+    restart: unless-stopped
+
+  admin:
+    build: ./admin
+    environment:
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=https://${DOMAIN}
+      - ADMIN_USER=${ADMIN_USER}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - INTERNAL_API_URL=http://app:3456
+      - ADMIN_API_SECRET=${ADMIN_API_SECRET}
+    expose:
+      - "3000"
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot-etc:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
+    depends_on:
+      - app
+      - admin
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done'"
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  certbot-etc:
+  certbot-www:

@@ -1,0 +1,38 @@
+# Production deployment for shared host with existing nginx + certbot
+# Host nginx (managed by certbot) handles TLS termination and routes to these containers via 127.0.0.1.
+# Convention follows the other services on this host (jarvis, openpulse, haloignite).
+services:
+  app:
+    build: .
+    container_name: claudeproxy-app
+    environment:
+      - PORT=3456
+      - DATABASE_PATH=/app/data/proxy.db
+      - ADMIN_API_SECRET=${ADMIN_API_SECRET}
+      # Token can now be set via admin UI (Settings page) instead of env var.
+      # If set here, it serves as a fallback when no token is in the database.
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+    volumes:
+      - app-data:/app/data
+    ports:
+      - "127.0.0.1:9026:3456"
+    restart: unless-stopped
+
+  admin:
+    build: ./admin
+    container_name: claudeproxy-admin
+    environment:
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=https://${DOMAIN}
+      - ADMIN_USER=${ADMIN_USER}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - INTERNAL_API_URL=http://app:3456
+      - ADMIN_API_SECRET=${ADMIN_API_SECRET}
+    ports:
+      - "127.0.0.1:9027:3000"
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  app-data:

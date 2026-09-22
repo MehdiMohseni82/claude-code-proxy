@@ -5,6 +5,8 @@ import { recordTokensForRateLimit } from "../middleware/rateLimiter.js";
 import { invalidateBudgetCache } from "../middleware/budgetCheck.js";
 import { getOAuthToken } from "./settingsService.js";
 
+const STDERR_TAIL_CHARS = 4000;
+
 interface TrackedQueryParams {
   completionId: string;
   prompt: string;
@@ -53,6 +55,12 @@ export function trackedQuery(params: TrackedQueryParams): TrackedQueryResult {
     model: params.resolvedModel,
     maxTurns: params.maxTurns ?? 1,
     settingSources: [],
+  };
+  // Capture the CLI's stderr so failures are logged with the real cause instead of
+  // just "process exited with code 1". Only the tail is kept to bound memory.
+  let stderrTail = "";
+  sdkOptions.stderr = (data: string) => {
+    stderrTail = (stderrTail + data).slice(-STDERR_TAIL_CHARS);
   };
   if (params.includePartialMessages) sdkOptions.includePartialMessages = true;
   if (params.mcpServers) sdkOptions.mcpServers = params.mcpServers;
@@ -158,7 +166,13 @@ export function trackedQuery(params: TrackedQueryParams): TrackedQueryResult {
         outputTokens,
         totalCostUsd,
         durationMs: Date.now() - startTime,
-        errorMessage: err.message ?? "Unknown error",
+        // The CLI reports API failures (404 model, usage limits) as assistant text
+        // before exiting 1, so include that text and stderr alongside the exit error.
+        errorMessage: [
+          err.message ?? "Unknown error",
+          responseChunks.join("\n").trim(),
+          stderrTail.trim() && `--- stderr ---\n${stderrTail.trim()}`,
+        ].filter(Boolean).join("\n"),
         fullResponse: responseChunks.length > 0 ? responseChunks.join("\n") : undefined,
       });
       throw err;

@@ -34,3 +34,6 @@ Thumbs.db
 *.pem
 *.key
 *.crt
+
+# SSH keys and other secrets
+secrets/

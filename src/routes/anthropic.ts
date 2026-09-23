@@ -2,6 +2,7 @@ import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { mkdirSync } from "fs";
 import type { Request, Response } from "express";
+import { classifyUpstreamError } from "../services/errorClassifier.js";
 import { trackedQuery } from "../services/sdkBridge.js";
 import { cancelTask } from "../services/taskTracker.js";
 import { resolveModel } from "../models.js";
@@ -85,6 +86,19 @@ function anthropicError(
     type: "error",
     error: { type, message },
   });
+}
+
+/** Anthropic-shaped error for a failed SDK call, with the upstream cause and status. */
+function anthropicUpstreamError(res: Response, err: unknown): void {
+  const c = classifyUpstreamError(err);
+  if (c.retryAfterSeconds !== undefined) res.setHeader("Retry-After", String(c.retryAfterSeconds));
+  anthropicError(res, c.status, c.status >= 500 ? "api_error" : c.type, c.message);
+}
+
+/** Same classification for streams, where the status line is already sent. */
+function upstreamErrorEvent(err: unknown): { type: "error"; error: { type: string; message: string } } {
+  const c = classifyUpstreamError(err);
+  return { type: "error", error: { type: c.status >= 500 ? "api_error" : c.type, message: c.message } };
 }
 
 function makeMessageId(): string {
@@ -468,8 +482,7 @@ router.post("/messages", async (req: Request, res: Response) => {
     }
   } catch (error: unknown) {
     console.error("Error in /v1/messages:", error);
-    const message = error instanceof Error ? error.message : "Internal server error";
-    anthropicError(res, 500, "api_error", message);
+    if (!res.headersSent) anthropicUpstreamError(res, error);
   }
 });
 
@@ -600,10 +613,7 @@ async function handleWithTools(
       }
     }
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    if (!res.headersSent) {
-      anthropicError(res, 500, "api_error", message);
-    }
+    if (!res.headersSent) anthropicUpstreamError(res, err);
     return;
   }
 
@@ -722,8 +732,7 @@ async function handleBuiltinTools(
         writeEvent(event.type, event);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Internal server error";
-      writeEvent("error", { type: "error", error: { type: "api_error", message: msg } });
+      writeEvent("error", upstreamErrorEvent(err));
     }
     if (!clientDisconnected) res.end();
   } else {
@@ -1002,8 +1011,7 @@ async function handleStreamingPlain(
       writeEvent(eventType, event);
     }
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    writeEvent("error", { type: "error", error: { type: "api_error", message } });
+    writeEvent("error", upstreamErrorEvent(err));
   }
 
   if (!clientDisconnected) {

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { v4 as uuidv4 } from "uuid";
 import type { Request, Response } from "express";
+import { sendClassifiedError } from "../services/errorClassifier.js";
 import { trackedQuery } from "../services/sdkBridge.js";
 import { cancelTask } from "../services/taskTracker.js";
 import { AVAILABLE_MODELS, resolveModel } from "../models.js";
@@ -166,12 +167,7 @@ router.post("/chat/completions", async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     console.error("Error in /v1/chat/completions:", error);
-    res.status(500).json({
-      error: {
-        message: error.message || "Internal server error",
-        type: "server_error",
-      },
-    });
+    if (!res.headersSent) sendClassifiedError(res, error);
   }
 });
 
@@ -269,10 +265,7 @@ async function handleWithTools(
       }
     }
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    if (!res.headersSent) {
-      res.status(500).json({ error: { message, type: "server_error" } });
-    }
+    if (!res.headersSent) sendClassifiedError(res, err);
     return;
   }
 

@@ -4,6 +4,7 @@ import { insertPendingRequest, completeRequest } from "./historyService.js";
 import { recordTokensForRateLimit } from "../middleware/rateLimiter.js";
 import { invalidateBudgetCache } from "../middleware/budgetCheck.js";
 import { getOAuthToken } from "./settingsService.js";
+import { attachUpstreamText } from "./errorClassifier.js";
 
 const STDERR_TAIL_CHARS = 4000;
 
@@ -161,6 +162,8 @@ export function trackedQuery(params: TrackedQueryParams): TrackedQueryResult {
         invalidateBudgetCache(params.apiKeyId);
       }
     } catch (err: any) {
+      // Hand the CLI's own words to the route layer so it can pick a status code.
+      attachUpstreamText(err, [responseChunks.join("\n"), stderrTail].join("\n"));
       completeRequest(logId, "error", {
         inputTokens,
         outputTokens,
